@@ -20,7 +20,7 @@ If you don't have it installed, you can follow [this guide](https://packaging.py
 
 ## First things first ...
 
-Let’s head to the MissingLink Keras Tutorial 1 [Github repository](https://github.com/missinglinkai/missinglink-tensorflow-tutorial1), and examine it.
+Let’s head to the MissingLink TensorFlow Tutorial 1 [Github repository](https://github.com/missinglinkai/missinglink-tensorflow-tutorial1), and examine it.
 
  Notice it contains the program file, `mnist_cnn.py`, and a `requirements.txt` file. This code trains a simple convnet on the MNIST dataset (borrowed from [TensorFlow tutorials](https://github.com/tensorflow/models/tree/master/tutorials/image/mnist)).  
 
