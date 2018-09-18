@@ -128,71 +128,86 @@ $ pip install -r requirements.txt
 Open the `mnist_cnn.py` script file and import the MissingLink SDK:
 ```diff
 // ...
-from keras.layers import Dense, Dropout, Flatten
-from keras.layers import Conv2D, MaxPooling2D
-from keras import backend as K
+from six.moves import urllib
+from six.moves import xrange  # pylint: disable=redefined-builtin
+import tensorflow as tf
 +import missinglink
 
-batch_size = 128
-num_classes = 10
-epochs = 12
+# CVDF mirror of http://yann.lecun.com/exdb/mnist/
+SOURCE_URL = 'https://storage.googleapis.com/cvdf-datasets/mnist/'
+WORK_DIRECTORY = 'data'
 // ...
 ```
 
-Now we need to initialize a callback object that Keras will call during the different stages of the experiment:
+Now we need to initialize the project so that we could have TensorFlow call the MissingLink server during the different stages of the experiment.
 
 <!--- TODO: Make sure it works without user id and project id / token) --->
 
 ```diff
 // ...
-from keras.layers import Conv2D, MaxPooling2D
-from keras import backend as K
+from six.moves import xrange  # pylint: disable=redefined-builtin
+import tensorflow as tf
 import missinglink
 +
-+missinglink_callback = missinglink.KerasCallback()
- 
-batch_size = 128
-num_classes = 10
-epochs = 12
++project = missinglink.TensorFlowProject()
+
+# CVDF mirror of http://yann.lecun.com/exdb/mnist/
+SOURCE_URL = 'https://storage.googleapis.com/cvdf-datasets/mnist/'
+WORK_DIRECTORY = 'data'
 // ...
 ```
 
-Finally, let Keras use our callback object. We want to add calls during the training and test stages.  
-
-Scroll all the way to the bottom of the file and add the MissingLink callback to the `fit()` function call:
+Now let's have TensorFlow use our project. We would need to inject calls to MissingLink during the training stage.  
+Let's scroll to the `run_training()` function and wrap the epoch loop with a MissingLink experiment:
 
 ```diff
 // ...
-model.fit(x_train, y_train,
-          batch_size=batch_size,
-          epochs=epochs,
-          verbose=1,
-          validation_data=(x_test, y_test),
-+         callbacks=[missinglink_callback])
+        # Initialize the graph
+        init = tf.global_variables_initializer()
+        session = tf.Session()
+        session.run(init)
 
-score = model.evaluate(x_test, y_test, verbose=0)
-print('Test loss:', score[0])
-print('Test accuracy:', score[1])
++       with missinglink_project.create_experiment() as experiment:
+
+            # Start the training loop
+-           for step in range(MAX_STEPS):
++           for step in experiment.loop(max_iterations=MAX_STEPS):
+                feed_dict = fill_feed_dict(data_sets.train, images_placeholder, labels_placeholder)
+
+                _, loss_value = session.run([train_op, loss], feed_dict=feed_dict)
+
+                # Validate the model with the validation dataset
 // ...
+```
+
+Next, we need to wrap the training call with a call to the SDK. We'll `experiment.train` scope before the `session.run` which runs the optimizer to let the SDK know it should collect the metrics as training metrics.
+
+```diff
+            for step in experiment.loop(max_iterations=MAX_STEPS):
+                feed_dict = fill_feed_dict(data_sets.train, images_placeholder, labels_placeholder)
+
+-               _, loss_value = session.run([train_op, loss], feed_dict=feed_dict)
++               with experiment.train(
++                   monitored_metrics={'loss': loss, 'acc': eval_correct}):
++                   # Note that you only need to provide the optimizer op. The SDK will automatically run the metric
++                   # tensors provided in the `experiment.train` context (and `experiment` context).
++                   _, loss_value = session.run([train_op, loss], feed_dict=feed_dict)
+
+                # Validate the model with the validation dataset
+                if (step + 1) % 500 == 0 or (step + 1) == MAX_STEPS:
 ```
 
 Lastly, let the MissingLink SDK know we're starting the testing stage:
 
 ```diff
 // ...
-model.fit(x_train, y_train,
-          batch_size=batch_size,
-          epochs=epochs,
-          verbose=1,
-          validation_data=(x_test, y_test),
-          callbacks=[missinglink_callback])
+                # Validate the model with the validation dataset
+                if (step + 1) % 500 == 0 or (step + 1) == MAX_STEPS:
+                    print('Step %d: loss = %.2f' % (step, loss_value))
+                    print('Running on validation dataset...')
++                   with experiment.validation(monitored_metrics={'loss': loss, 'acc': eval_correct}):
+                        do_eval(session, eval_correct, images_placeholder, labels_placeholder, data_sets.validation)
 
--score = model.evaluate(x_test, y_test, verbose=0)
-+with missinglink_callback.test(model):
-+    score = model.evaluate(x_test, y_test, verbose=0)
-+
-print('Test loss:', score[0])
-print('Test accuracy:', score[1])
 // ...
 ```
 
