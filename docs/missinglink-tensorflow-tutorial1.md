@@ -139,7 +139,7 @@ IMAGE_PIXELS = IMAGE_SIZE * IMAGE_SIZE
 // ...
 ```
 
-Now we need to initialize the project so that we could have TensorFlow call the MissingLink server during the different stages of the experiment.
+Now we need to initialize the project so that we can have TensorFlow call the MissingLink server during the different stages of the experiment.
 
 <!--- TODO: Make sure it works without user id and project id / token) --->
 
