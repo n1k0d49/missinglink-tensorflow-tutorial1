@@ -60,7 +60,7 @@ $ python mnist_cnn.py
 
 ![Experiment progress in terminal](../images/tutorials-experiment-start.gif)
 
-As you can see, the code runs the experiment in 10 epochs.
+As you can see, the code starts running the experiment.
 
 # Integrating the MissingLink SDK
 
@@ -128,14 +128,14 @@ $ pip install -r requirements.txt
 Open the `mnist_cnn.py` script file and import the MissingLink SDK:
 ```diff
 // ...
-from six.moves import urllib
-from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
+from tensorflow.examples.tutorials.mnist import input_data
 +import missinglink
 
-# CVDF mirror of http://yann.lecun.com/exdb/mnist/
-SOURCE_URL = 'https://storage.googleapis.com/cvdf-datasets/mnist/'
-WORK_DIRECTORY = 'data'
+# Input params
+NUM_CLASSES = 10  # The MNIST dataset has 10 classes, representing the digits 0 through 9.
+IMAGE_SIZE = 28  # The MNIST images are always 28x28 pixels.
+IMAGE_PIXELS = IMAGE_SIZE * IMAGE_SIZE
 // ...
 ```
 
@@ -145,20 +145,21 @@ Now we need to initialize the project so that we could have TensorFlow call the 
 
 ```diff
 // ...
-from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
+from tensorflow.examples.tutorials.mnist import input_data
 import missinglink
 +
 +project = missinglink.TensorFlowProject()
 
-# CVDF mirror of http://yann.lecun.com/exdb/mnist/
-SOURCE_URL = 'https://storage.googleapis.com/cvdf-datasets/mnist/'
-WORK_DIRECTORY = 'data'
+# Input params
+NUM_CLASSES = 10  # The MNIST dataset has 10 classes, representing the digits 0 through 9.
+IMAGE_SIZE = 28  # The MNIST images are always 28x28 pixels.
+IMAGE_PIXELS = IMAGE_SIZE * IMAGE_SIZE
 // ...
 ```
 
 Now let's have TensorFlow use our project. We would need to inject calls to MissingLink during the training stage.  
-Let's scroll to the `run_training()` function and wrap the epoch loop with a MissingLink experiment:
+Let's scroll to the `run_training()` function and replace the step loop with a MissingLink experiment loop:
 
 ```diff
 // ...
@@ -167,37 +168,34 @@ Let's scroll to the `run_training()` function and wrap the epoch loop with a Mis
         session = tf.Session()
         session.run(init)
 
-+       with missinglink_project.create_experiment() as experiment:
-
++
++       with project.create_experiment() as experiment:
             # Start the training loop
 -           for step in range(MAX_STEPS):
 +           for step in experiment.loop(max_iterations=MAX_STEPS):
                 feed_dict = fill_feed_dict(data_sets.train, images_placeholder, labels_placeholder)
 
                 _, loss_value = session.run([train_op, loss], feed_dict=feed_dict)
-
-                # Validate the model with the validation dataset
 // ...
 ```
 
 Next, we need to wrap the training call with a call to the SDK. We'll `experiment.train` scope before the `session.run` which runs the optimizer to let the SDK know it should collect the metrics as training metrics.
 
 ```diff
+// ...
             for step in experiment.loop(max_iterations=MAX_STEPS):
                 feed_dict = fill_feed_dict(data_sets.train, images_placeholder, labels_placeholder)
 
 -               _, loss_value = session.run([train_op, loss], feed_dict=feed_dict)
-+               with experiment.train(
-+                   monitored_metrics={'loss': loss, 'acc': eval_correct}):
-+                   # Note that you only need to provide the optimizer op. The SDK will automatically run the metric
-+                   # tensors provided in the `experiment.train` context (and `experiment` context).
++               with experiment.train(monitored_metrics={'loss': loss, 'acc': eval_correct}):
 +                   _, loss_value = session.run([train_op, loss], feed_dict=feed_dict)
 
                 # Validate the model with the validation dataset
                 if (step + 1) % 500 == 0 or (step + 1) == MAX_STEPS:
+// ...
 ```
 
-Lastly, let the MissingLink SDK know we're starting the testing stage:
+Lastly, let the MissingLink SDK know we're running validation:
 
 ```diff
 // ...
